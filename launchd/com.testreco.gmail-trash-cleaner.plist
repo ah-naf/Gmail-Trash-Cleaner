@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.testreco.gmail-trash-cleaner</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/testreco/bin/run-cleaner.sh</string>
+    </array>
+    <!-- seconds between runs: 60 = every minute -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StartInterval</key>
+    <integer>120</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/testreco/Library/Logs/gmail-trash-cleaner.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/testreco/Library/Logs/gmail-trash-cleaner.log</string>
+</dict>
+</plist>
