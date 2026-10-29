@@ -1,6 +1,6 @@
 # gmail-trash-cleaner
 
-Backs up and then permanently deletes everything in a Gmail account's Trash, over IMAP. No browser login: it uses a Google app password. It can run by hand or as a macOS background job.
+Backs up and then permanently deletes everything in a Gmail account's Trash, over IMAP. No browser login: it uses a Google app password. It can run by hand or as a background job on macOS or Linux.
 
 > **Deletion is permanent.** Mail removed from Trash cannot be recovered. Use `-dry-run` or `-export` first.
 
@@ -8,7 +8,7 @@ Backs up and then permanently deletes everything in a Gmail account's Trash, ove
 
 - Go 1.22+ (to build)
 - A Gmail account with 2-Step Verification on
-- macOS (only for the background job; the program itself runs anywhere)
+- macOS or Linux (only for the background job; the program itself runs anywhere)
 
 ## 1. Gmail setup (once)
 
@@ -99,11 +99,71 @@ launchctl bootout gui/$(id -u)/com.testreco.gmail-trash-cleaner
 rm ~/Library/LaunchAgents/com.testreco.gmail-trash-cleaner.plist
 ```
 
+## 5. Run in the background (Linux)
+
+Same job as macOS, scheduled by a systemd user timer. It runs 1 minute after the timer starts, then every 2 minutes. Code stays in the repo; nothing is copied except the built binary (`~/bin/gmail-trash-cleaner`).
+
+1. **Install Go and, optionally, a keyring tool** (`libsecret-tools` provides `secret-tool`):
+   ```
+   sudo apt install golang libsecret-tools
+   ```
+2. **Run the installer** from the repo root (use your address). It builds the binary, asks for the app password, writes the unit files to `~/.config/systemd/user/`, and starts the timer:
+   ```
+   GMAIL_USER='you@gmail.com' ./run.sh install
+   ```
+   The password goes in the keyring if one is available. Otherwise it goes in `~/.config/gmail-trash-cleaner/password` (mode 600). WSL and headless servers have no keyring, so they use the file.
+3. **Test once by hand** (this really empties Trash):
+   ```
+   GMAIL_USER='you@gmail.com' ./run.sh
+   ```
+
+`./run.sh` picks `launchd/` on macOS and `systemd/` on Linux. `./run.sh install` is Linux only.
+
+### WSL
+
+- Enable systemd in `/etc/wsl.conf`, then run `wsl --shutdown` from Windows and reopen Ubuntu:
+  ```
+  [boot]
+  systemd=true
+  ```
+- The timer runs only while WSL is up. Opening Ubuntu starts it. WSL may shut down when all terminals are closed and it is idle.
+- To start at Windows logon and stay up, create a Task Scheduler task running `wsl.exe -d Ubuntu --exec sleep infinity` (use your distro name from `wsl -l`), and run `loginctl enable-linger $USER` once inside WSL.
+
+### Where things go
+
+| What | Where |
+|---|---|
+| Log | `journalctl --user -u gmail-trash-cleaner` |
+| Exports | `~/gmail-trash-backup/<from>_to_<to>/` |
+| Last successful run | `~/gmail-trash-backup/.last-run` |
+| Unit files | `~/.config/systemd/user/gmail-trash-cleaner.{service,timer}` |
+
+### Useful commands
+
+```
+systemctl --user list-timers                           # NEXT / LAST run
+systemctl --user status gmail-trash-cleaner.service    # result of last run
+systemctl --user start gmail-trash-cleaner.service     # run now
+journalctl --user -u gmail-trash-cleaner -f            # live log
+```
+
+The timer shows `active (waiting)` between runs, and the service shows `inactive (dead)`. Both are normal.
+
+### Stop and remove
+
+```
+systemctl --user disable --now gmail-trash-cleaner.timer
+rm ~/.config/systemd/user/gmail-trash-cleaner.{service,timer}
+systemctl --user daemon-reload
+```
+
 ## Troubleshooting
 
 - **`find trash: no mailbox with \Trash attribute`**: Trash is hidden from IMAP; tick **Show in IMAP** (step 1.3).
 - **`login: ... Invalid credentials`**: wrong app password, or 2-Step Verification is off. Enter the password without spaces.
 - **Keychain lookup fails**: the item name must be `gmail-trash-cleaner` and the account must match `GMAIL_USER` exactly. Check with `security find-generic-password -a "you@gmail.com" -s gmail-trash-cleaner -w`.
+- **`secret-tool: The name org.freedesktop.secrets was not provided`** (Linux): no keyring daemon. The scripts fall back to `~/.config/gmail-trash-cleaner/password`; rerun `./run.sh install` to create it.
+- **`Failed to connect to bus`** (Linux/WSL): systemd is not running; see the WSL section.
 - **Job shows `runs = 0`**: make sure the plist has `RunAtLoad`, then reload it.
 - **Phone still shows deleted mail**: the Gmail app caches; pull to refresh or re-sync the account.
 
